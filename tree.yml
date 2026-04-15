@@ -1,0 +1,23 @@
+client
+server
+database
+cache
+container
+orchestration
+CI/CD
+cloud provider
+
+languages:
+- frontend
+  - js/ts
+    - react
+    - angular
+    - vue.js
+
+- backend
+  - python
+    - flask
+    - django
+  - js
+    - express
+    - static

@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dotmaster"
+dynamic = ["version"]
+description = "Interactive dotfile generator and manager for any project"
+readme = "README.md"
+license = { text = "MIT" }
+
+[project.urls]
+Repository = "https://github.com/dotmaster/dotmaster"
+Issues = "https://github.com/dotmaster/dotmaster/issues"
+requires-python = ">=3.10"
+authors = [{ name = "dotmaster contributors" }]
+keywords = ["dotfiles", "cli", "developer-tools", "configuration"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "typer[all]>=0.12.0",
+    "InquirerPy>=0.3.4",
+    "jinja2>=3.1.0",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+]
+
+[project.scripts]
+dotmaster = "dotmaster.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["dotmaster"]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "dotmaster/_version.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
