@@ -9,9 +9,6 @@ description = "Interactive dotfile generator and manager for any project"
 readme = "README.md"
 license = { text = "MIT" }
 
-[project.urls]
-Repository = "https://github.com/dotmaster/dotmaster"
-Issues = "https://github.com/dotmaster/dotmaster/issues"
 requires-python = ">=3.10"
 authors = [{ name = "dotmaster contributors" }]
 keywords = ["dotfiles", "cli", "developer-tools", "configuration"]
@@ -34,6 +31,11 @@ dependencies = [
     "pyyaml>=6.0",
     "rich>=13.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/dotmaster/dotmaster"
+Issues = "https://github.com/dotmaster/dotmaster/issues"
+
 
 [project.optional-dependencies]
 dev = [
