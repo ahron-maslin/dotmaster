@@ -49,6 +49,11 @@ dotmaster = "dotmaster.cli:app"
 [tool.hatch.build.targets.wheel]
 packages = ["dotmaster"]
 
+[tool.hatch.envs.dev]
+features = [
+    "dev",
+]
+
 [tool.hatch.version]
 source = "vcs"
 
