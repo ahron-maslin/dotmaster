@@ -39,7 +39,8 @@ def render_to_file(
     context: dict[str, Any],
     output_path: Path,
     *,
-    overwrite: bool = True,
+    overwrite: bool = False,
+    merge: bool = True,
 ) -> Path:
     """
     Render *template_name* and write the output to *output_path*.
@@ -53,16 +54,25 @@ def render_to_file(
     output_path : Path
         Destination file path.
     overwrite : bool
-        If False and *output_path* already exists, the file is left untouched.
+        If True, always overwrite the existing file completely. Note that `merge` is ignored if `overwrite` is True.
+    merge : bool
+        If True and *output_path* already exists, smartly merge the new content into the existing file.
 
     Returns
     -------
     Path
         The (possibly unchanged) output path.
     """
-    if output_path.exists() and not overwrite:
+    from dotmaster.merger import merge_content
+
+    if output_path.exists() and not overwrite and not merge:
         return output_path
+        
     output_path.parent.mkdir(parents=True, exist_ok=True)
     content = render(template_name, context)
+
+    if output_path.exists() and merge and not overwrite:
+        content = merge_content(output_path, content)
+
     output_path.write_text(content, encoding="utf-8")
     return output_path

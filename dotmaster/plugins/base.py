@@ -126,5 +126,14 @@ class BasePlugin(ABC):
         return self.generate(config, output_dir)
 
 
+    def post_run(
+        self, config: "DotmasterConfig", output_dir: Path
+    ) -> None:
+        """
+        Lifecycle hook invoked after all plugins have finished generating files.
+        Can be overridden to run shell commands, install deps, format files, etc.
+        """
+        pass
+
 # Suppress NameError for the type hint inside _eval_trigger at runtime
 from typing import Any  # noqa: E402 (below the class is intentional)

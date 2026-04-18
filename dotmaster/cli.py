@@ -13,6 +13,7 @@ Commands
 """
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from typing import Annotated, Optional
@@ -24,6 +25,8 @@ from rich.table import Table
 from rich.text import Text
 
 from dotmaster import __version__
+
+logger = logging.getLogger("dotmaster")
 
 app = typer.Typer(
     name="dotmaster",
@@ -51,13 +54,35 @@ def root_callback(
     version: Annotated[
         Optional[bool],
         typer.Option(
-            "--version", "-v",
+            "--version", "-V",
             help="Show version and exit.",
             is_eager=True,
         ),
     ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose", "-v",
+            help="Enable verbose output and debug logging.",
+            is_eager=True,
+        ),
+    ] = False,
 ) -> None:
     """dotmaster — Interactive dotfile generator and manager."""
+    # Configure logging
+    log_file = Path.cwd() / ".dotmaster.log"
+    log_level = logging.DEBUG if verbose else logging.INFO
+    
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=[
+            logging.FileHandler(log_file, encoding="utf-8"),
+        ]
+    )
+    if verbose:
+        logger.debug(f"Verbose logging enabled. Writing to {log_file}")
+
     if version:
         console.print(f"dotmaster v{__version__}")
         raise typer.Exit()
@@ -80,6 +105,7 @@ def _run_generation(
     """Run active plugins and persist generated-file metadata to config."""
     from dotmaster.config import save_config
     from dotmaster.plugins import registry
+    from dotmaster.backup import backup_managed_files
 
     config_path = output_dir / "dotmaster.yaml"
 
@@ -95,6 +121,11 @@ def _run_generation(
     if not plugins_to_run:
         console.print("[yellow]No plugins matched your configuration.[/yellow]")
         return
+        
+    # Trigger backup before generation
+    archive = backup_managed_files(config, output_dir)
+    if archive:
+        console.print(f"[dim]Backups saved to {archive.relative_to(output_dir)}[/dim]\n")
 
     console.print()
     generated_paths: list[Path] = []
@@ -102,16 +133,29 @@ def _run_generation(
     for plugin in plugins_to_run:
         console.print(f"  [dim]→[/dim]  [bold]{plugin.name}[/bold]  [dim]{plugin.description}[/dim]")
         try:
+            logger.debug(f"Running plugin: {plugin.name}")
             paths = plugin.run(config, output_dir)
             for p in paths:
                 rel = p.relative_to(output_dir)
                 console.print(f"       [green]✓[/green]  {rel}")
                 config.record_generated(rel, plugin.name)
                 generated_paths.append(p)
+                logger.debug(f"Plugin {plugin.name} generated {rel}")
         except Exception as exc:
+            logger.exception(f"Plugin {plugin.name} failed with an error.")
             console.print(f"       [red]✗[/red]  {exc}")
+            console.print(f"          [dim]See .dotmaster.log for trace details.[/dim]")
 
     save_config(config, config_path)
+    
+    # Run post_generation hooks
+    for plugin in plugins_to_run:
+        try:
+            plugin.post_run(config, output_dir)
+        except Exception as exc:
+            logger.exception(f"Plugin {plugin.name} failed during post_run.")
+            console.print(f"       [yellow]⚠[/yellow]  {plugin.name} post_run hook failed: {exc}")
+
     console.print()
     console.print(
         f"  [bold green]Done![/bold green] "
