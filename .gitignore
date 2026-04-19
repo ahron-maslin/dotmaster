@@ -11,3 +11,4 @@ build/
 .venv
 env/
 venv/
+dotmaster/_version.py
