@@ -55,6 +55,7 @@ class TestRender:
             {"languages": ["python"], "framework": "none"},
             path,
             overwrite=False,
+            merge=False,
         )
         assert path.read_text() == "original content"
 
