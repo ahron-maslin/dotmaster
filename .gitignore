@@ -12,3 +12,5 @@ build/
 env/
 venv/
 dotmaster/_version.py
+.dotmaster.log
+.dotmaster/

@@ -42,7 +42,7 @@ class DatabasePlugin(BasePlugin):
             # Language context for app service image
             "has_python": "python" in stack.languages,
             "has_node": any(
-                l in stack.languages for l in ("javascript", "typescript")
+                lang in stack.languages for lang in ("javascript", "typescript")
             ),
         }
         out = render_to_file(

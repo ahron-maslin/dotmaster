@@ -26,7 +26,7 @@ from dotmaster.config import (
     StackConfig,
     DatabaseConfig,
 )
-from dotmaster.profiles import get_profile, list_profiles
+from dotmaster.profiles import get_profile
 
 console = Console()
 
@@ -38,7 +38,7 @@ console = Console()
 
 def _framework_choices(languages: list[str]) -> list[Choice | Separator]:
     choices: list[Choice | Separator] = []
-    if any(l in languages for l in ("javascript", "typescript")):
+    if any(lang in languages for lang in ("javascript", "typescript")):
         choices += [
             Separator("── JavaScript / TypeScript ──"),
             Choice("nextjs", "Next.js"),
@@ -69,7 +69,7 @@ def _framework_choices(languages: list[str]) -> list[Choice | Separator]:
 
 def _pm_choices(languages: list[str]) -> list[Choice | Separator]:
     choices: list[Choice | Separator] = []
-    if any(l in languages for l in ("javascript", "typescript")):
+    if any(lang in languages for lang in ("javascript", "typescript")):
         choices += [
             Separator("── Node.js ──"),
             Choice("npm", "npm"),
@@ -98,7 +98,7 @@ def _pm_choices(languages: list[str]) -> list[Choice | Separator]:
 
 def _linter_choices(languages: list[str]) -> list[Choice]:
     choices: list[Choice] = []
-    if any(l in languages for l in ("javascript", "typescript")):
+    if any(lang in languages for lang in ("javascript", "typescript")):
         choices.append(Choice("eslint", "ESLint"))
     if "python" in languages:
         choices.append(Choice("ruff", "Ruff"))
@@ -111,7 +111,7 @@ def _linter_choices(languages: list[str]) -> list[Choice]:
 
 def _formatter_choices(languages: list[str]) -> list[Choice]:
     choices: list[Choice] = []
-    if any(l in languages for l in ("javascript", "typescript")):
+    if any(lang in languages for lang in ("javascript", "typescript")):
         choices.append(Choice("prettier", "Prettier"))
     if "python" in languages:
         choices.append(Choice("black", "Black"))
@@ -124,7 +124,7 @@ def _formatter_choices(languages: list[str]) -> list[Choice]:
 
 def _testing_choices(languages: list[str]) -> list[Choice]:
     choices: list[Choice] = []
-    if any(l in languages for l in ("javascript", "typescript")):
+    if any(lang in languages for lang in ("javascript", "typescript")):
         choices.append(Choice("jest", "Jest"))
         choices.append(Choice("vitest", "Vitest"))
     if "python" in languages:
@@ -137,7 +137,7 @@ def _testing_choices(languages: list[str]) -> list[Choice]:
 
 def _orm_choices(languages: list[str]) -> list[Choice]:
     choices: list[Choice] = []
-    if any(l in languages for l in ("javascript", "typescript")):
+    if any(lang in languages for lang in ("javascript", "typescript")):
         choices.append(Choice("prisma", "Prisma"))
         choices.append(Choice("drizzle", "Drizzle"))
         choices.append(Choice("typeorm", "TypeORM"))
@@ -218,7 +218,6 @@ def run_wizard(
             default=False,
         ).execute()
         if use_preset:
-            profile_names = [p[0] for p in list_profiles()]
             profile_name = inquirer.select(
                 message="Select a profile:",
                 choices=[

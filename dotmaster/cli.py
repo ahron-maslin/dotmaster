@@ -14,7 +14,6 @@ Commands
 from __future__ import annotations
 
 import logging
-import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -22,7 +21,6 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from dotmaster import __version__
 
@@ -144,7 +142,7 @@ def _run_generation(
         except Exception as exc:
             logger.exception(f"Plugin {plugin.name} failed with an error.")
             console.print(f"       [red]✗[/red]  {exc}")
-            console.print(f"          [dim]See .dotmaster.log for trace details.[/dim]")
+            console.print("          [dim]See .dotmaster.log for trace details.[/dim]")
 
     save_config(config, config_path)
     
@@ -197,7 +195,7 @@ def init(
     Creates [bold]dotmaster.yaml[/bold] and all selected config files
     in the target directory.
     """
-    from dotmaster.config import config_exists, load_config, save_config
+    from dotmaster.config import config_exists
     from dotmaster.wizard import run_wizard
 
     output.mkdir(parents=True, exist_ok=True)
@@ -417,6 +415,14 @@ def profile(
             config.quality.formatter = q["formatter"]
         if q.get("testing") and config.quality.testing == "none":
             config.quality.testing = q["testing"]
+        if i.get("ci") and config.infrastructure.ci == "none":
+            config.infrastructure.ci = i["ci"]
+        if i.get("docker") and not config.infrastructure.docker:
+            config.infrastructure.docker = True
+        if i.get("docker_multistage") and not config.infrastructure.docker_multistage:
+            config.infrastructure.docker_multistage = True
+        if i.get("env_file") and not config.infrastructure.env_file:
+            config.infrastructure.env_file = True
         config.profile = name
 
         save_config(config, output / "dotmaster.yaml")
@@ -452,7 +458,7 @@ def validate(
 
     # Rule: ESLint requires a JS/TS language
     if config.quality.linter == "eslint" and not any(
-        l in config.stack.languages for l in ("javascript", "typescript")
+        lang in config.stack.languages for lang in ("javascript", "typescript")
     ):
         issues.append(
             "Linter is 'eslint' but no JavaScript/TypeScript language is selected."
@@ -466,7 +472,7 @@ def validate(
 
     # Rule: Prettier requires JS/TS
     if config.quality.formatter == "prettier" and not any(
-        l in config.stack.languages for l in ("javascript", "typescript")
+        lang in config.stack.languages for lang in ("javascript", "typescript")
     ):
         issues.append(
             "Formatter is 'prettier' but no JavaScript/TypeScript language is selected."
@@ -480,7 +486,7 @@ def validate(
 
     # Rule: Jest/Vitest require JS/TS
     if config.quality.testing in ("jest", "vitest") and not any(
-        l in config.stack.languages for l in ("javascript", "typescript")
+        lang in config.stack.languages for lang in ("javascript", "typescript")
     ):
         issues.append(
             f"Testing is '{config.quality.testing}' but no JS/TS language is selected."

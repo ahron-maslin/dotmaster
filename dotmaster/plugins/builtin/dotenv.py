@@ -21,8 +21,8 @@ class DotenvPlugin(BasePlugin):
             "framework": config.stack.framework,
             "has_python": "python" in config.stack.languages,
             "has_node": any(
-                l in config.stack.languages
-                for l in ("javascript", "typescript")
+                lang in config.stack.languages
+                for lang in ("javascript", "typescript")
             ),
             "db_engines": config.database.engines,
         }

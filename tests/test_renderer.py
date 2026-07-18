@@ -4,8 +4,6 @@ Unit tests for the Jinja2 template renderer.
 """
 from __future__ import annotations
 
-import pytest
-
 from dotmaster.renderer import render, render_to_file
 
 

@@ -134,7 +134,7 @@ class DotmasterConfig:
         return lang in self.stack.languages
 
     def has_any_language(self, *langs: str) -> bool:
-        return any(self.has_language(l) for l in langs)
+        return any(self.has_language(lang) for lang in langs)
 
     def record_generated(self, path: Path, plugin_name: str) -> None:
         """Add or update a generated entry."""

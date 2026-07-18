@@ -5,9 +5,7 @@ Unit tests for the syntax-aware file merger.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-import pytest
 import tomlkit
 import yaml
 

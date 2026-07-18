@@ -4,8 +4,6 @@ Unit tests for the plugin registry and individual built-in plugins.
 """
 from __future__ import annotations
 
-import pytest
-
 from dotmaster.config import (
     DatabaseConfig,
     DotmasterConfig,
@@ -14,7 +12,7 @@ from dotmaster.config import (
     QualityConfig,
     StackConfig,
 )
-from dotmaster.plugins import PluginRegistry, registry
+from dotmaster.plugins import registry
 
 
 def _cfg(
@@ -126,7 +124,7 @@ class TestEditorConfigPlugin:
 
         plugin = EditorConfigPlugin()
         config = _cfg()
-        paths = plugin.generate(config, tmp_path)
+        plugin.generate(config, tmp_path)
         assert (tmp_path / ".editorconfig").exists()
         content = (tmp_path / ".editorconfig").read_text()
         assert "root = true" in content
@@ -163,7 +161,7 @@ class TestDotenvPlugin:
 
         plugin = DotenvPlugin()
         config = _cfg(env_file=True)
-        paths = plugin.generate(config, tmp_path)
+        plugin.generate(config, tmp_path)
         assert (tmp_path / ".env.example").exists()
 
 
@@ -181,7 +179,7 @@ class TestDatabasePlugin:
 
         plugin = DatabasePlugin()
         config = self._db_cfg()
-        paths = plugin.generate(config, tmp_path)
+        plugin.generate(config, tmp_path)
         assert (tmp_path / "docker-compose.yml").exists()
         content = (tmp_path / "docker-compose.yml").read_text()
         assert "postgres" in content
@@ -308,7 +306,7 @@ class TestPrismaPlugin:
         from dotmaster.plugins.builtin.prisma import PrismaPlugin
 
         plugin = PrismaPlugin()
-        paths = plugin.generate(self._prisma_cfg(), tmp_path)
+        plugin.generate(self._prisma_cfg(), tmp_path)
         assert (tmp_path / "prisma" / "schema.prisma").exists()
 
     def test_prisma_schema_uses_correct_provider(self, tmp_path):

@@ -24,8 +24,8 @@ class DockerPlugin(BasePlugin):
             "multistage": config.infrastructure.docker_multistage,
             "has_python": "python" in config.stack.languages,
             "has_node": any(
-                l in config.stack.languages
-                for l in ("javascript", "typescript")
+                lang in config.stack.languages
+                for lang in ("javascript", "typescript")
             ),
             "has_go": "go" in config.stack.languages,
         }

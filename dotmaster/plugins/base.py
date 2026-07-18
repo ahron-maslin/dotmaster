@@ -45,6 +45,9 @@ class BasePlugin(ABC):
     #: Example: ``["linter:eslint", "language:typescript"]``
     triggers: list[str] = []
 
+    #: Plugin version, for future compatibility checks
+    version: str = "1.0.0"
+
     # ------------------------------------------------------------------
     # Activation
     # ------------------------------------------------------------------
@@ -121,9 +124,16 @@ class BasePlugin(ABC):
         Tries ``delegate()`` first.  If it returns False, calls ``generate()``.
         Returns the list of created/modified paths.
         """
-        if self.delegate(config, output_dir):
-            return []
-        return self.generate(config, output_dir)
+        try:
+            if self.delegate(config, output_dir):
+                return []
+            result = self.generate(config, output_dir)
+            if not isinstance(result, list):
+                raise TypeError(f"{self.name}.generate() must return a list of Paths, got {type(result)}")
+            return result
+        except Exception as e:
+            # We wrap plugin exceptions to make debugging easier for users
+            raise RuntimeError(f"Plugin '{self.name}' failed during generation: {e}") from e
 
 
     def post_run(
