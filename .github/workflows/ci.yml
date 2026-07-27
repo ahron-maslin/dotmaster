@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+  workflow_call:  # lets release.yml run this as its test gate before publishing
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
