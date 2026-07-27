@@ -2,37 +2,32 @@
 dotmaster/plugins/builtin/gitlab_ci.py
 Generates .gitlab-ci.yml for GitLab CI/CD.
 """
+
 from __future__ import annotations
 
-from pathlib import Path
-
-from dotmaster.plugins.base import BasePlugin
-from dotmaster.renderer import render_to_file
+from dotmaster.plugins.api import Context, FileAction, MergeStrategy, Plugin
 
 
-class GitLabCIPlugin(BasePlugin):
+class GitLabCIPlugin(Plugin):
     name = "gitlab_ci"
     description = "Generates .gitlab-ci.yml"
-    triggers = ["ci:gitlab_ci"]
+    provides = ("ci.pipeline",)
+    outputs = (".gitlab-ci.yml",)
+    triggers = ("infrastructure.ci is gitlab_ci",)
 
-    def generate(self, config, output_dir: Path) -> list[Path]:
-        ctx = {
-            "project_name": config.project.name,
-            "languages": config.stack.languages,
-            "framework": config.stack.framework,
-            "package_manager": config.stack.package_manager,
-            "linter": config.quality.linter,
-            "formatter": config.quality.formatter,
-            "testing": config.quality.testing,
-            "docker": config.infrastructure.docker,
-            "has_python": "python" in config.stack.languages,
-            "has_node": any(
-                lang in config.stack.languages
-                for lang in ("javascript", "typescript")
-            ),
-            "has_go": "go" in config.stack.languages,
-        }
-        out = render_to_file(
-            "gitlab_ci.j2", ctx, output_dir / ".gitlab-ci.yml"
+    def matches(self, config) -> bool:
+        return config.infrastructure.ci == "gitlab_ci"
+
+    def plan(self, config, ctx: Context) -> list[FileAction]:
+        content = ctx.render(
+            "gitlab_ci.j2",
+            package_manager=config.stack.package_manager,
+            linter=config.quality.linter,
+            formatter=config.quality.formatter,
+            testing=config.quality.testing,
+            docker=config.infrastructure.docker,
+            has_python=config.has_python,
+            has_node=config.has_node,
+            has_go=config.has_go,
         )
-        return [out]
+        return [self.file(".gitlab-ci.yml", content, strategy=MergeStrategy.OVERWRITE)]

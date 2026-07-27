@@ -1,49 +1,81 @@
 """
 tests/test_plugin_contract.py
-Tests to ensure all plugins adhere to the expected interface and contract.
+Every registered plugin must obey dotmaster.plugins.api.Plugin's contract:
+plan() is pure (no filesystem writes) and returns FileActions only.
 """
+
 from __future__ import annotations
 
 import pytest
 
+from dotmaster.config import DotmasterConfig
 from dotmaster.plugins import registry
+from dotmaster.plugins.api import Context, FileAction
+
 
 def test_all_plugins_have_required_metadata():
     for plugin in registry.all():
-        assert plugin.name, f"Plugin {plugin.__class__.__name__} missing name"
-        assert plugin.description, f"Plugin {plugin.__class__.__name__} missing description"
-        assert isinstance(plugin.triggers, list), f"Plugin {plugin.__class__.__name__} triggers must be a list"
+        assert plugin.name, f"{plugin.__class__.__name__} missing name"
+        assert plugin.description, f"{plugin.__class__.__name__} missing description"
+        assert isinstance(plugin.provides, tuple)
+        assert isinstance(plugin.outputs, tuple)
 
-def test_all_plugins_have_valid_triggers():
-    valid_keys = {
-        "linter", "formatter", "testing", "ci", "language", "framework", 
-        "package_manager", "docker", "env_file", "editorconfig",
-        "database", "db_engine", "orm", "migrations"
-    }
-    for plugin in registry.all():
-        for trigger in plugin.triggers:
-            assert ":" in trigger, f"Trigger '{trigger}' in {plugin.name} is malformed, expected 'key:value'"
-            key, _, _ = trigger.partition(":")
-            assert key in valid_keys, f"Invalid trigger key '{key}' in plugin {plugin.name}"
 
-def test_plugin_run_returns_list_of_paths(tmp_path, mocker):
+def test_plan_returns_only_file_actions_and_writes_nothing(tmp_path):
     """
-    Ensure every plugin's run() method returns a list of Paths, 
-    without crashing on a generic dummy config.
+    Every plugin's plan() must be pure: run it against a config that makes it
+    active, then assert the plugin touched nothing on disk.
     """
-    from dotmaster.config import DotmasterConfig
-    
-    # We create a dummy config that triggers everything so generate() can run
-    config = DotmasterConfig()
-    
+    config = DotmasterConfig.model_validate(
+        {
+            "project": {"name": "contract-test"},
+            "stack": {
+                "languages": ["python", "javascript", "typescript", "go"],
+                "framework": "fastapi",
+                "package_manager": "poetry",
+            },
+            "quality": {"linter": "ruff", "formatter": "black", "testing": "pytest"},
+            "infrastructure": {
+                "docker": True,
+                "docker_multistage": True,
+                "ci": "github_actions",
+                "env_file": True,
+                "pre_commit": True,
+            },
+            "database": {
+                "enabled": True,
+                "engines": ["postgresql"],
+                "orm": "sqlalchemy",
+                "migrations": "alembic",
+            },
+        }
+    )
+    ctx = Context(root=tmp_path, config=config, offline=True)
+
     for plugin in registry.all():
-        # Mock delegate to False so we always test generate()
-        mocker.patch.object(plugin, "delegate", return_value=False)
+        if not plugin.matches(config):
+            continue
+        before = sorted(tmp_path.rglob("*"))
         try:
-            result = plugin.run(config, tmp_path)
-            assert isinstance(result, list), f"{plugin.name}.run() did not return a list"
-            # It's okay if result is empty, but if it has items they must be Paths
-            for path in result:
-                assert hasattr(path, "exists"), f"{plugin.name} returned a non-Path object: {type(path)}"
-        except Exception as e:
-            pytest.fail(f"Plugin {plugin.name} crashed during run(): {e}")
+            result = plugin.plan(config, ctx)
+        except Exception as exc:
+            pytest.fail(f"{plugin.name}.plan() raised: {exc}")
+        after = sorted(tmp_path.rglob("*"))
+        assert before == after, f"{plugin.name}.plan() wrote to disk — plan() must be pure"
+
+        assert isinstance(result, list), f"{plugin.name}.plan() did not return a list"
+        for action in result:
+            assert isinstance(action, FileAction), (
+                f"{plugin.name} returned {type(action)}, not FileAction"
+            )
+            assert action.plugin == plugin.name, (
+                f"{plugin.name} produced a FileAction owned by {action.plugin}"
+            )
+
+
+def test_declared_outputs_are_a_reasonable_hint():
+    """outputs should be non-empty for any plugin that writes files."""
+    for plugin in registry.all():
+        if plugin.name == "package_json":
+            continue  # conditionally writes nothing; outputs still documents intent
+        assert plugin.outputs, f"{plugin.name} declares no outputs"

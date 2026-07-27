@@ -2,37 +2,45 @@
 dotmaster/plugins/builtin/docker.py
 Generates Dockerfile and .dockerignore.
 """
+
 from __future__ import annotations
 
-from pathlib import Path
-
-from dotmaster.plugins.base import BasePlugin
-from dotmaster.renderer import render_to_file
+from dotmaster.plugins.api import Context, FileAction, MergeStrategy, Plugin
 
 
-class DockerPlugin(BasePlugin):
+class DockerPlugin(Plugin):
     name = "docker"
     description = "Generates Dockerfile and .dockerignore"
-    triggers = ["docker:true"]
+    provides = ("container.dockerfile",)
+    outputs = ("Dockerfile", ".dockerignore")
+    triggers = ("infrastructure.docker is true",)
 
-    def generate(self, config, output_dir: Path) -> list[Path]:
-        ctx = {
-            "project_name": config.project.name,
-            "languages": config.stack.languages,
-            "framework": config.stack.framework,
-            "package_manager": config.stack.package_manager,
-            "multistage": config.infrastructure.docker_multistage,
-            "has_python": "python" in config.stack.languages,
-            "has_node": any(
-                lang in config.stack.languages
-                for lang in ("javascript", "typescript")
-            ),
-            "has_go": "go" in config.stack.languages,
-        }
-        dockerfile = render_to_file(
-            "dockerfile.j2", ctx, output_dir / "Dockerfile"
+    def matches(self, config) -> bool:
+        return config.infrastructure.docker
+
+    def plan(self, config, ctx: Context) -> list[FileAction]:
+        content = ctx.render(
+            "dockerfile.j2",
+            project_name=config.project.name,
+            languages=config.stack.languages,
+            framework=config.stack.framework,
+            package_manager=config.stack.package_manager,
+            multistage=config.infrastructure.docker_multistage,
+            has_python=config.has_python,
+            has_node=config.has_node,
+            has_go=config.has_go,
+            has_poetry_lock=ctx.exists("poetry.lock"),
+            has_uv_lock=ctx.exists("uv.lock"),
+            has_requirements=ctx.exists("requirements.txt"),
+            standalone_next=ctx.exists("next.config.js") or ctx.exists("next.config.mjs"),
         )
-        dockerignore = render_to_file(
-            "dockerignore.j2", ctx, output_dir / ".dockerignore"
+        ignore = ctx.render(
+            "dockerignore.j2",
+            has_python=config.has_python,
+            has_node=config.has_node,
+            has_go=config.has_go,
         )
-        return [dockerfile, dockerignore]
+        return [
+            self.file("Dockerfile", content, strategy=MergeStrategy.OVERWRITE),
+            self.block_file(".dockerignore", ignore),
+        ]

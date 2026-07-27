@@ -1,0 +1,239 @@
+{
+  "$defs": {
+    "DatabaseConfig": {
+      "additionalProperties": false,
+      "description": "Database engines and data-access tooling.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "engines": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Engines",
+          "type": "array"
+        },
+        "orm": {
+          "default": "none",
+          "title": "Orm",
+          "type": "string"
+        },
+        "migrations": {
+          "default": "none",
+          "title": "Migrations",
+          "type": "string"
+        }
+      },
+      "title": "DatabaseConfig",
+      "type": "object"
+    },
+    "InfraConfig": {
+      "additionalProperties": false,
+      "description": "Infrastructure and DevOps options.",
+      "properties": {
+        "docker": {
+          "default": false,
+          "title": "Docker",
+          "type": "boolean"
+        },
+        "docker_multistage": {
+          "default": false,
+          "title": "Docker Multistage",
+          "type": "boolean"
+        },
+        "ci": {
+          "default": "none",
+          "title": "Ci",
+          "type": "string"
+        },
+        "env_file": {
+          "default": false,
+          "title": "Env File",
+          "type": "boolean"
+        },
+        "editorconfig": {
+          "default": true,
+          "title": "Editorconfig",
+          "type": "boolean"
+        },
+        "pre_commit": {
+          "default": false,
+          "title": "Pre Commit",
+          "type": "boolean"
+        }
+      },
+      "title": "InfraConfig",
+      "type": "object"
+    },
+    "OptionsConfig": {
+      "additionalProperties": false,
+      "description": "Behavioural switches for dotmaster itself.",
+      "properties": {
+        "offline": {
+          "default": true,
+          "title": "Offline",
+          "type": "boolean"
+        },
+        "backup": {
+          "default": true,
+          "title": "Backup",
+          "type": "boolean"
+        },
+        "keep_backups": {
+          "default": 10,
+          "minimum": 0,
+          "title": "Keep Backups",
+          "type": "integer"
+        }
+      },
+      "title": "OptionsConfig",
+      "type": "object"
+    },
+    "PluginsConfig": {
+      "additionalProperties": false,
+      "description": "Third-party plugin control.",
+      "properties": {
+        "allow": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allow",
+          "type": "array"
+        },
+        "disable": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Disable",
+          "type": "array"
+        },
+        "settings": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "title": "Settings",
+          "type": "object"
+        }
+      },
+      "title": "PluginsConfig",
+      "type": "object"
+    },
+    "ProjectConfig": {
+      "additionalProperties": false,
+      "description": "Basic project metadata.",
+      "properties": {
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "author": {
+          "default": "",
+          "title": "Author",
+          "type": "string"
+        },
+        "license": {
+          "default": "MIT",
+          "title": "License",
+          "type": "string"
+        }
+      },
+      "title": "ProjectConfig",
+      "type": "object"
+    },
+    "QualityConfig": {
+      "additionalProperties": false,
+      "description": "Linter, formatter and test runner.",
+      "properties": {
+        "linter": {
+          "default": "none",
+          "title": "Linter",
+          "type": "string"
+        },
+        "formatter": {
+          "default": "none",
+          "title": "Formatter",
+          "type": "string"
+        },
+        "testing": {
+          "default": "none",
+          "title": "Testing",
+          "type": "string"
+        }
+      },
+      "title": "QualityConfig",
+      "type": "object"
+    },
+    "StackConfig": {
+      "additionalProperties": false,
+      "description": "Language, framework and package manager selection.",
+      "properties": {
+        "languages": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Languages",
+          "type": "array"
+        },
+        "framework": {
+          "default": "none",
+          "title": "Framework",
+          "type": "string"
+        },
+        "package_manager": {
+          "default": "none",
+          "title": "Package Manager",
+          "type": "string"
+        }
+      },
+      "title": "StackConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Root configuration object; maps one-to-one to dotmaster.yaml.",
+  "properties": {
+    "version": {
+      "default": "2",
+      "title": "Version",
+      "type": "string"
+    },
+    "project": {
+      "$ref": "#/$defs/ProjectConfig"
+    },
+    "stack": {
+      "$ref": "#/$defs/StackConfig"
+    },
+    "quality": {
+      "$ref": "#/$defs/QualityConfig"
+    },
+    "infrastructure": {
+      "$ref": "#/$defs/InfraConfig"
+    },
+    "database": {
+      "$ref": "#/$defs/DatabaseConfig"
+    },
+    "options": {
+      "$ref": "#/$defs/OptionsConfig"
+    },
+    "plugins": {
+      "$ref": "#/$defs/PluginsConfig"
+    },
+    "profile": {
+      "default": "none",
+      "title": "Profile",
+      "type": "string"
+    }
+  },
+  "title": "dotmaster.yaml",
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

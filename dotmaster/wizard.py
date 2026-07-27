@@ -1,34 +1,32 @@
 """
 dotmaster/wizard.py
-Interactive Q&A wizard powered by InquirerPy.
+The guided Q&A that produces a DotmasterConfig.
 
-Returns a fully populated DotmasterConfig after asking the user a structured
-series of questions about their project stack and tooling preferences.
+All actual I/O goes through a :class:`~dotmaster.prompts.Prompter`, so the
+wizard itself is pure and testable: swap in a ``ScriptedPrompter`` for tests,
+or a ``DefaultPrompter`` for ``dotmaster init --yes`` / CI, with no branching
+in this module at all.
 """
+
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from InquirerPy import inquirer
-from InquirerPy.base.control import Choice
-from InquirerPy.separator import Separator
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
 from dotmaster import __version__
-from dotmaster.config import (
-    DotmasterConfig,
-    InfraConfig,
-    ProjectConfig,
-    QualityConfig,
-    StackConfig,
-    DatabaseConfig,
-)
+from dotmaster.config import DotmasterConfig
 from dotmaster.profiles import get_profile
+from dotmaster.prompts import Choice, Prompter
 
 console = Console()
+
+
+class WizardAborted(Exception):  # noqa: N818 - a deliberate stop, not an error
+    """The user declined to proceed — not an error, just a stop."""
 
 
 # ---------------------------------------------------------------------------
@@ -36,11 +34,10 @@ console = Console()
 # ---------------------------------------------------------------------------
 
 
-def _framework_choices(languages: list[str]) -> list[Choice | Separator]:
-    choices: list[Choice | Separator] = []
+def _framework_choices(languages: list[str]) -> list[Choice]:
+    choices: list[Choice] = []
     if any(lang in languages for lang in ("javascript", "typescript")):
         choices += [
-            Separator("── JavaScript / TypeScript ──"),
             Choice("nextjs", "Next.js"),
             Choice("react", "React (Vite)"),
             Choice("vue", "Vue 3"),
@@ -50,49 +47,34 @@ def _framework_choices(languages: list[str]) -> list[Choice | Separator]:
         ]
     if "python" in languages:
         choices += [
-            Separator("── Python ──"),
             Choice("fastapi", "FastAPI"),
             Choice("django", "Django"),
             Choice("flask", "Flask"),
         ]
     if "go" in languages:
-        choices += [
-            Separator("── Go ──"),
-            Choice("gin", "Gin"),
-            Choice("echo", "Echo"),
-            Choice("fiber", "Fiber"),
-        ]
-    choices.append(Separator("──────────────────────"))
+        choices += [Choice("gin", "Gin"), Choice("echo", "Echo"), Choice("fiber", "Fiber")]
     choices.append(Choice("none", "None / plain"))
     return choices
 
 
-def _pm_choices(languages: list[str]) -> list[Choice | Separator]:
-    choices: list[Choice | Separator] = []
+def _pm_choices(languages: list[str]) -> list[Choice]:
+    choices: list[Choice] = []
     if any(lang in languages for lang in ("javascript", "typescript")):
         choices += [
-            Separator("── Node.js ──"),
             Choice("npm", "npm"),
             Choice("pnpm", "pnpm (fast, disk-efficient)"),
             Choice("yarn", "Yarn"),
         ]
     if "python" in languages:
         choices += [
-            Separator("── Python ──"),
             Choice("poetry", "Poetry"),
             Choice("uv", "uv (ultra-fast)"),
             Choice("pip", "pip / requirements.txt"),
         ]
     if "go" in languages:
-        choices += [
-            Separator("── Go ──"),
-            Choice("go_mod", "go mod"),
-        ]
+        choices.append(Choice("go_mod", "go mod"))
     if "rust" in languages:
-        choices += [
-            Separator("── Rust ──"),
-            Choice("cargo", "Cargo"),
-        ]
+        choices.append(Choice("cargo", "Cargo"))
     return choices or [Choice("none", "None")]
 
 
@@ -101,8 +83,7 @@ def _linter_choices(languages: list[str]) -> list[Choice]:
     if any(lang in languages for lang in ("javascript", "typescript")):
         choices.append(Choice("eslint", "ESLint"))
     if "python" in languages:
-        choices.append(Choice("ruff", "Ruff"))
-        choices.append(Choice("flake8", "Flake8"))
+        choices += [Choice("ruff", "Ruff"), Choice("flake8", "Flake8")]
     if "go" in languages:
         choices.append(Choice("golangci-lint", "golangci-lint"))
     choices.append(Choice("none", "None"))
@@ -114,8 +95,7 @@ def _formatter_choices(languages: list[str]) -> list[Choice]:
     if any(lang in languages for lang in ("javascript", "typescript")):
         choices.append(Choice("prettier", "Prettier"))
     if "python" in languages:
-        choices.append(Choice("black", "Black"))
-        choices.append(Choice("ruff", "Ruff (formatter mode)"))
+        choices += [Choice("black", "Black"), Choice("ruff", "Ruff (formatter mode)")]
     if "go" in languages:
         choices.append(Choice("gofmt", "gofmt"))
     choices.append(Choice("none", "None"))
@@ -125,8 +105,7 @@ def _formatter_choices(languages: list[str]) -> list[Choice]:
 def _testing_choices(languages: list[str]) -> list[Choice]:
     choices: list[Choice] = []
     if any(lang in languages for lang in ("javascript", "typescript")):
-        choices.append(Choice("jest", "Jest"))
-        choices.append(Choice("vitest", "Vitest"))
+        choices += [Choice("jest", "Jest"), Choice("vitest", "Vitest")]
     if "python" in languages:
         choices.append(Choice("pytest", "pytest"))
     if "go" in languages:
@@ -138,19 +117,23 @@ def _testing_choices(languages: list[str]) -> list[Choice]:
 def _orm_choices(languages: list[str]) -> list[Choice]:
     choices: list[Choice] = []
     if any(lang in languages for lang in ("javascript", "typescript")):
-        choices.append(Choice("prisma", "Prisma"))
-        choices.append(Choice("drizzle", "Drizzle"))
-        choices.append(Choice("typeorm", "TypeORM"))
-        choices.append(Choice("mongoose", "Mongoose"))
+        choices += [
+            Choice("prisma", "Prisma"),
+            Choice("drizzle", "Drizzle"),
+            Choice("typeorm", "TypeORM"),
+            Choice("mongoose", "Mongoose"),
+        ]
     if "python" in languages:
-        choices.append(Choice("sqlalchemy", "SQLAlchemy"))
-        choices.append(Choice("django_orm", "Django ORM"))
-        choices.append(Choice("tortoise", "Tortoise ORM"))
+        choices += [
+            Choice("sqlalchemy", "SQLAlchemy"),
+            Choice("django_orm", "Django ORM"),
+            Choice("tortoise", "Tortoise ORM"),
+        ]
     choices.append(Choice("none", "None"))
     return choices
 
 
-def _migration_choices(languages: list[str], orm: str) -> list[Choice]:
+def _migration_choices(orm: str) -> list[Choice]:
     choices: list[Choice] = []
     if orm == "prisma":
         choices.append(Choice("prisma", "Prisma Migrate"))
@@ -164,12 +147,20 @@ def _migration_choices(languages: list[str], orm: str) -> list[Choice]:
     return choices
 
 
-def _default(choices: list[Choice | Separator], fallback: str) -> str:
-    """Return the value of the first non-Separator choice, or *fallback*."""
-    for c in choices:
-        if isinstance(c, Choice):
-            return c.value
-    return fallback
+def _default_value(choices: list[Choice], fallback: str) -> str:
+    return choices[0].value if choices else fallback
+
+
+def _with_preselection(choices: list[Choice], preselected: list[str]) -> list[Choice]:
+    """
+    Mark choices already in *preselected* as enabled.
+
+    This is what a profile's answers actually pre-fill: InquirerPy's checkbox
+    only positions the cursor from ``default``, it never pre-checks boxes —
+    the ``enabled`` flag on each ``Choice`` is what does that.
+    """
+    wanted = set(preselected)
+    return [Choice(c.value, c.label, enabled=c.value in wanted) for c in choices]
 
 
 # ---------------------------------------------------------------------------
@@ -178,107 +169,74 @@ def _default(choices: list[Choice | Separator], fallback: str) -> str:
 
 
 def run_wizard(
+    prompter: Prompter,
+    *,
     preset_profile: str | None = None,
     output_dir: Path | None = None,
+    show_banner: bool = True,
 ) -> DotmasterConfig:
     """
-    Run the full interactive wizard.
+    Run the full guided Q&A and return a populated :class:`DotmasterConfig`.
 
-    Parameters
-    ----------
-    preset_profile : str | None
-        If given, pre-fill answers from this profile name (user can still
-        override individual values).
-    output_dir : Path | None
-        Target directory; used to compute a default project name.
-
-    Returns
-    -------
-    DotmasterConfig
-        Fully populated configuration ready to generate dotfiles from.
+    Every answer is asked through *prompter* — pass an ``InquirerPrompter``
+    for a real terminal, a ``DefaultPrompter`` to accept every default
+    silently, or a ``ScriptedPrompter`` in tests.
     """
-    if output_dir is None:
-        output_dir = Path.cwd()
+    output_dir = output_dir or Path.cwd()
 
-    # ── Banner ────────────────────────────────────────────────────────────────
-    banner = Text()
-    banner.append("  dotmaster ", style="bold magenta")
-    banner.append(f"v{__version__}", style="dim")
-    banner.append("  ·  dotfile generator", style="dim")
-    console.print(
-        Panel(banner, border_style="magenta", expand=False, padding=(0, 2))
-    )
-    console.print()
+    if show_banner:
+        banner = Text()
+        banner.append("  dotmaster ", style="bold magenta")
+        banner.append(f"v{__version__}", style="dim")
+        banner.append("  ·  dotfile generator", style="dim")
+        console.print(Panel(banner, border_style="magenta", expand=False, padding=(0, 2)))
+        console.print()
 
-    # ── Load profile defaults ─────────────────────────────────────────────────
     profile_data: dict = {}
-    if preset_profile is None:
-        use_preset = inquirer.confirm(
-            message="Start from a preset profile?",
-            default=False,
-        ).execute()
-        if use_preset:
-            profile_name = inquirer.select(
-                message="Select a profile:",
-                choices=[
-                    Choice("web_app",      "🌐  Web App — React/Next.js + ESLint + Docker + CI"),
-                    Choice("library",      "📦  Library — ESLint + Jest, no Docker"),
-                    Choice("backend_api",  "⚙️   Backend API — Python + Docker + CI"),
-                    Choice("monorepo",     "🗂️   Monorepo — pnpm + ESLint + CI"),
-                    Choice("none",         "✏️   Custom — answer everything manually"),
-                ],
-                default="none",
-            ).execute()
-            if profile_name != "none":
-                preset_profile = profile_name
-                data = get_profile(profile_name)
-                if data:
-                    profile_data = data
-                    console.print(
-                        f"  [dim]Loaded profile:[/dim] [bold magenta]{profile_name}[/bold magenta]"
-                        "  [dim](you can still override any setting below)[/dim]\n"
-                    )
-    else:
+    if preset_profile is None and prompter.confirm("Start from a preset profile?", default=False):
+        profile_name = prompter.select(
+            "Select a profile:",
+            [
+                Choice("web_app", "🌐  Web App — React/Next.js + ESLint + Docker + CI"),
+                Choice("library", "📦  Library — ESLint + Jest, no Docker"),
+                Choice("backend_api", "⚙️  Backend API — Python + Docker + CI"),
+                Choice("monorepo", "🗂️  Monorepo — pnpm + ESLint + CI"),
+                Choice("none", "✏️  Custom — answer everything manually"),
+            ],
+            default="none",
+        )
+        if profile_name != "none":
+            preset_profile = profile_name
+    if preset_profile:
         data = get_profile(preset_profile)
         if data:
             profile_data = data
+            console.print(
+                f"  [dim]Loaded profile:[/dim] [bold magenta]{preset_profile}[/bold magenta]"
+                "  [dim](you can still change anything below)[/dim]\n"
+            )
+        else:
+            console.print(
+                f"  [yellow]Unknown profile '{preset_profile}'; starting blank.[/yellow]\n"
+            )
+            preset_profile = None
 
     def pd(section: str, key: str, fallback):
-        """Safe accessor for profile_data nested values."""
         return profile_data.get(section, {}).get(key, fallback)
 
-    # ── Phase 1: Project meta ─────────────────────────────────────────────────
+    # ── Project ──────────────────────────────────────────────────────────
     console.print("[bold]  📁  Project[/bold]")
-
     default_name = output_dir.name
-    name = inquirer.text(
-        message="Project name:",
-        default=default_name,
-    ).execute().strip() or default_name
-
-    description = inquirer.text(
-        message="Description:",
-        default="",
-    ).execute().strip()
-
-    default_author = (
-        os.environ.get("GIT_AUTHOR_NAME")
-        or os.environ.get("USER")
-        or ""
-    )
-    author = inquirer.text(
-        message="Author:",
-        default=default_author,
-    ).execute().strip()
-
+    name = prompter.text("Project name:", default=default_name) or default_name
+    description = prompter.text("Description:", default="")
+    default_author = os.environ.get("GIT_AUTHOR_NAME") or os.environ.get("USER") or ""
+    author = prompter.text("Author:", default=default_author)
     console.print()
 
-    # ── Phase 2: Language & Framework ────────────────────────────────────────
+    # ── Stack ────────────────────────────────────────────────────────────
     console.print("[bold]  🛠️   Stack[/bold]")
-
-    languages: list[str] = inquirer.checkbox(
-        message="Language(s):",
-        choices=[
+    language_choices = _with_preselection(
+        [
             Choice("javascript", "JavaScript"),
             Choice("typescript", "TypeScript"),
             Choice("python", "Python"),
@@ -286,193 +244,145 @@ def run_wizard(
             Choice("rust", "Rust"),
             Choice("java", "Java"),
         ],
-        default=pd("stack", "languages", []),
-        validate=lambda result: len(result) > 0,
-        invalid_message="Please select at least one language.",
-        instruction="(space to select, enter to confirm)",
-    ).execute()
+        pd("stack", "languages", []),
+    )
+    languages = prompter.checkbox("Language(s):", language_choices, required=True)
 
     fw_choices = _framework_choices(languages)
-    framework: str = inquirer.select(
-        message="Framework:",
-        choices=fw_choices,
-        default=pd("stack", "framework", _default(fw_choices, "none")),
-    ).execute()
+    framework = prompter.select(
+        "Framework:",
+        fw_choices,
+        default=pd("stack", "framework", _default_value(fw_choices, "none")),
+    )
 
     pm_choices = _pm_choices(languages)
-    package_manager: str = inquirer.select(
-        message="Package manager:",
-        choices=pm_choices,
-        default=pd("stack", "package_manager", _default(pm_choices, "none")),
-    ).execute()
-
+    package_manager = prompter.select(
+        "Package manager:",
+        pm_choices,
+        default=pd("stack", "package_manager", _default_value(pm_choices, "none")),
+    )
     console.print()
 
-    # ── Phase 3: Code quality ────────────────────────────────────────────────
+    # ── Code quality ─────────────────────────────────────────────────────
     console.print("[bold]  ✅  Code Quality[/bold]")
-
     linter_choices = _linter_choices(languages)
-    linter: str = inquirer.select(
-        message="Linter:",
-        choices=linter_choices,
-        default=pd("quality", "linter", _default(linter_choices, "none")),
-    ).execute()
-
+    linter = prompter.select(
+        "Linter:",
+        linter_choices,
+        default=pd("quality", "linter", _default_value(linter_choices, "none")),
+    )
     formatter_choices = _formatter_choices(languages)
-    formatter: str = inquirer.select(
-        message="Formatter:",
-        choices=formatter_choices,
-        default=pd("quality", "formatter", _default(formatter_choices, "none")),
-    ).execute()
-
+    formatter = prompter.select(
+        "Formatter:",
+        formatter_choices,
+        default=pd("quality", "formatter", _default_value(formatter_choices, "none")),
+    )
     testing_choices = _testing_choices(languages)
-    testing: str = inquirer.select(
-        message="Testing:",
-        choices=testing_choices,
-        default=pd("quality", "testing", _default(testing_choices, "none")),
-    ).execute()
-
+    testing = prompter.select(
+        "Testing:",
+        testing_choices,
+        default=pd("quality", "testing", _default_value(testing_choices, "none")),
+    )
     console.print()
 
-    # ── Phase 4: Database ────────────────────────────────────────────────────
+    # ── Database ─────────────────────────────────────────────────────────
     console.print("[bold]  🗄️   Database[/bold]")
-
-    db_enabled: bool = inquirer.confirm(
-        message="Configure a database?",
-        default=pd("database", "enabled", False),
-    ).execute()
-
+    db_enabled = prompter.confirm("Configure a database?", default=pd("database", "enabled", False))
     db_engines: list[str] = []
-    orm: str = "none"
-    migrations: str = "none"
-
+    orm = "none"
+    migrations = "none"
     if db_enabled:
-        db_engines = inquirer.checkbox(
-            message="Database Engines:",
-            choices=[
+        engine_choices = _with_preselection(
+            [
                 Choice("postgresql", "PostgreSQL"),
                 Choice("mysql", "MySQL / MariaDB"),
                 Choice("mongodb", "MongoDB"),
                 Choice("redis", "Redis"),
                 Choice("sqlite", "SQLite"),
             ],
-            default=pd("database", "engines", []),
-            validate=lambda result: len(result) > 0,
-            invalid_message="Please select at least one database engine.",
-            instruction="(space to select, enter to confirm)",
-        ).execute()
-
+            pd("database", "engines", []),
+        )
+        db_engines = prompter.checkbox("Database engines:", engine_choices, required=True)
         orm_choices = _orm_choices(languages)
-        orm = inquirer.select(
-            message="ORM / ODM:",
-            choices=orm_choices,
-            default=pd("database", "orm", _default(orm_choices, "none")),
-        ).execute()
-
-        mig_choices = _migration_choices(languages, orm)
-        migrations = inquirer.select(
-            message="Migrations tooling:",
-            choices=mig_choices,
-            default=pd("database", "migrations", _default(mig_choices, "none")),
-        ).execute()
-
+        orm = prompter.select(
+            "ORM / ODM:",
+            orm_choices,
+            default=pd("database", "orm", _default_value(orm_choices, "none")),
+        )
+        mig_choices = _migration_choices(orm)
+        migrations = prompter.select(
+            "Migrations tooling:",
+            mig_choices,
+            default=pd("database", "migrations", _default_value(mig_choices, "none")),
+        )
     console.print()
 
-    # ── Phase 5: Infrastructure ───────────────────────────────────────────────
+    # ── Infrastructure ───────────────────────────────────────────────────
     console.print("[bold]  🐳  Infrastructure[/bold]")
-
-    docker: bool = inquirer.confirm(
-        message="Docker?",
-        default=pd("infrastructure", "docker", False),
-    ).execute()
-
-    docker_multistage: bool = False
+    docker = prompter.confirm("Docker?", default=pd("infrastructure", "docker", False))
+    docker_multistage = False
     if docker:
-        docker_multistage = inquirer.confirm(
-            message="Multi-stage Dockerfile?",
-            default=pd("infrastructure", "docker_multistage", True),
-        ).execute()
-
-    ci: str = inquirer.select(
-        message="CI/CD:",
-        choices=[
+        docker_multistage = prompter.confirm(
+            "Multi-stage Dockerfile?", default=pd("infrastructure", "docker_multistage", True)
+        )
+    ci = prompter.select(
+        "CI/CD:",
+        [
             Choice("github_actions", "GitHub Actions"),
-            Choice("gitlab_ci",      "GitLab CI"),
-            Choice("none",           "None"),
+            Choice("gitlab_ci", "GitLab CI"),
+            Choice("none", "None"),
         ],
         default=pd("infrastructure", "ci", "none"),
-    ).execute()
-
-    env_file: bool = inquirer.confirm(
-        message=".env file? (generates .env.example)",
-        default=pd("infrastructure", "env_file", False),
-    ).execute()
-
-    editorconfig: bool = inquirer.confirm(
-        message=".editorconfig?",
-        default=pd("infrastructure", "editorconfig", True),
-    ).execute()
-
+    )
+    env_file = prompter.confirm(
+        ".env file? (generates .env.example)", default=pd("infrastructure", "env_file", False)
+    )
+    editorconfig = prompter.confirm(
+        ".editorconfig?", default=pd("infrastructure", "editorconfig", True)
+    )
+    pre_commit = prompter.confirm(
+        "pre-commit hooks?", default=pd("infrastructure", "pre_commit", False)
+    )
     console.print()
 
-    # ── Build config ─────────────────────────────────────────────────────────
-    config = DotmasterConfig(
-        project=ProjectConfig(
-            name=name,
-            description=description,
-            author=author,
-        ),
-        stack=StackConfig(
-            languages=languages,
-            framework=framework,
-            package_manager=package_manager,
-        ),
-        quality=QualityConfig(
-            linter=linter,
-            formatter=formatter,
-            testing=testing,
-        ),
-        infrastructure=InfraConfig(
-            docker=docker,
-            docker_multistage=docker_multistage,
-            ci=ci,
-            env_file=env_file,
-            editorconfig=editorconfig,
-        ),
-        database=DatabaseConfig(
-            enabled=db_enabled,
-            engines=db_engines,
-            orm=orm,
-            migrations=migrations,
-        ),
-        profile=preset_profile or "none",
+    config = DotmasterConfig.model_validate(
+        {
+            "project": {"name": name, "description": description, "author": author},
+            "stack": {
+                "languages": languages,
+                "framework": framework,
+                "package_manager": package_manager,
+            },
+            "quality": {"linter": linter, "formatter": formatter, "testing": testing},
+            "infrastructure": {
+                "docker": docker,
+                "docker_multistage": docker_multistage,
+                "ci": ci,
+                "env_file": env_file,
+                "editorconfig": editorconfig,
+                "pre_commit": pre_commit,
+            },
+            "database": {
+                "enabled": db_enabled,
+                "engines": db_engines,
+                "orm": orm,
+                "migrations": migrations,
+            },
+            "profile": preset_profile or "none",
+        }
     )
 
-    # ── Summary confirmation ──────────────────────────────────────────────────
     _print_summary(config)
-    confirmed: bool = inquirer.confirm(
-        message="Generate dotfiles with these settings?",
-        default=True,
-    ).execute()
-
-    if not confirmed:
-        console.print("\n[yellow]Aborted.[/yellow]")
-        raise SystemExit(0)
+    if not prompter.confirm("Generate dotfiles with these settings?", default=True):
+        raise WizardAborted()
 
     return config
 
 
 def _print_summary(config: DotmasterConfig) -> None:
-    """Print a human-readable summary of what will be generated."""
     from rich.table import Table
 
-    table = Table(
-        title="Summary",
-        show_header=False,
-        border_style="dim",
-        box=None,
-        padding=(0, 2),
-    )
+    table = Table(title="Summary", show_header=False, border_style="dim", box=None, padding=(0, 2))
     table.add_column(style="bold dim", min_width=18)
     table.add_column(style="bold")
 
@@ -493,13 +403,11 @@ def _print_summary(config: DotmasterConfig) -> None:
         table.add_row("Migrations", config.database.migrations)
     table.add_row("Docker", "✓" if config.infrastructure.docker else "✗")
     if config.infrastructure.docker:
-        table.add_row(
-            "  Multi-stage",
-            "✓" if config.infrastructure.docker_multistage else "✗",
-        )
+        table.add_row("  Multi-stage", "✓" if config.infrastructure.docker_multistage else "✗")
     table.add_row("CI/CD", config.infrastructure.ci)
     table.add_row(".env.example", "✓" if config.infrastructure.env_file else "✗")
     table.add_row(".editorconfig", "✓" if config.infrastructure.editorconfig else "✗")
+    table.add_row("pre-commit", "✓" if config.infrastructure.pre_commit else "✗")
     if config.profile != "none":
         table.add_row("Profile", config.profile)
 

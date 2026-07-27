@@ -9,7 +9,6 @@ stages:
 {% if docker %}
   - build
 {% endif %}
-  - notify
 
 default:
   interruptible: true
@@ -25,24 +24,36 @@ variables:
   cache:
     key:
       files:
-        - {% if package_manager == 'pnpm' %}pnpm-lock.yaml{% elif package_manager == 'yarn' %}yarn.lock{% else %}package-lock.json{% endif %}
+{% if package_manager == 'pnpm' %}
+        - pnpm-lock.yaml
+{% elif package_manager == 'yarn' %}
+        - yarn.lock
+{% else %}
+        - package-lock.json
+{% endif %}
     paths:
       - $NODE_MODULES_CACHE
   before_script:
-    {% if package_manager == 'pnpm' %}
+{% if package_manager == 'pnpm' %}
     - corepack enable && pnpm install --frozen-lockfile
-    {% elif package_manager == 'yarn' %}
+{% elif package_manager == 'yarn' %}
     - yarn install --frozen-lockfile
-    {% else %}
+{% else %}
     - npm ci
-    {% endif %}
+{% endif %}
 
 {% if linter == 'eslint' %}
 eslint:
   extends: .node_base
   stage: lint
   script:
-    - {% if package_manager == 'pnpm' %}pnpm{% elif package_manager == 'yarn' %}yarn{% else %}npm{% endif %} run lint
+{% if package_manager == 'pnpm' %}
+    - pnpm run lint
+{% elif package_manager == 'yarn' %}
+    - yarn run lint
+{% else %}
+    - npm run lint
+{% endif %}
 {% endif %}
 
 {% if formatter == 'prettier' %}
@@ -50,7 +61,13 @@ prettier:
   extends: .node_base
   stage: lint
   script:
-    - {% if package_manager == 'pnpm' %}pnpm{% elif package_manager == 'yarn' %}yarn{% else %}npm{% endif %} run format:check
+{% if package_manager == 'pnpm' %}
+    - pnpm run format:check
+{% elif package_manager == 'yarn' %}
+    - yarn run format:check
+{% else %}
+    - npm run format:check
+{% endif %}
 {% endif %}
 
 {% if testing in ('jest', 'vitest') %}
@@ -58,7 +75,16 @@ prettier:
   extends: .node_base
   stage: test
   script:
-    - {% if package_manager == 'pnpm' %}pnpm{% elif package_manager == 'yarn' %}yarn{% else %}npm{% endif %} test {% if testing == 'jest' %}-- --coverage{% endif %}
+{% if package_manager == 'pnpm' %}
+    - pnpm test{% if testing == 'jest' %} -- --coverage{% endif %}
+
+{% elif package_manager == 'yarn' %}
+    - yarn test{% if testing == 'jest' %} -- --coverage{% endif %}
+
+{% else %}
+    - npm test{% if testing == 'jest' %} -- --coverage{% endif %}
+
+{% endif %}
   coverage: '/Lines\s*:\s*(\d+\.?\d*)%/'
   artifacts:
     when: always
@@ -66,7 +92,6 @@ prettier:
       junit: junit.xml
 {% endif %}
 {% endif %}
-
 {% if has_python %}
 # ── Python ───────────────────────────────────────────────────────────────────
 .python_base:
@@ -74,23 +99,31 @@ prettier:
   cache:
     key:
       files:
-        - {% if package_manager == 'poetry' %}poetry.lock{% else %}requirements*.txt{% endif %}
+{% if package_manager == 'poetry' %}
+        - poetry.lock
+{% else %}
+        - requirements.txt
+{% endif %}
     paths:
       - $PIP_CACHE_DIR
   before_script:
-    {% if package_manager == 'poetry' %}
+{% if package_manager == 'poetry' %}
     - pip install poetry --quiet
     - poetry install --no-interaction
-    {% else %}
+{% else %}
     - pip install -r requirements.txt -q
-    {% endif %}
+{% endif %}
 
 {% if linter == 'ruff' %}
 ruff:
   extends: .python_base
   stage: lint
   script:
-    - {% if package_manager == 'poetry' %}poetry run {% endif %}ruff check .
+{% if package_manager == 'poetry' %}
+    - poetry run ruff check .
+{% else %}
+    - ruff check .
+{% endif %}
 {% endif %}
 
 {% if formatter == 'black' %}
@@ -98,7 +131,11 @@ black:
   extends: .python_base
   stage: lint
   script:
-    - {% if package_manager == 'poetry' %}poetry run {% endif %}black --check .
+{% if package_manager == 'poetry' %}
+    - poetry run black --check .
+{% else %}
+    - black --check .
+{% endif %}
 {% endif %}
 
 {% if testing == 'pytest' %}
@@ -106,14 +143,17 @@ pytest:
   extends: .python_base
   stage: test
   script:
-    - {% if package_manager == 'poetry' %}poetry run {% endif %}pytest --tb=short --junitxml=report.xml
+{% if package_manager == 'poetry' %}
+    - poetry run pytest --tb=short --junitxml=report.xml
+{% else %}
+    - pytest --tb=short --junitxml=report.xml
+{% endif %}
   artifacts:
     when: always
     reports:
       junit: report.xml
 {% endif %}
 {% endif %}
-
 {% if docker %}
 # ── Docker build ─────────────────────────────────────────────────────────────
 docker-build:

@@ -3,7 +3,10 @@ __pycache__/
 *.class
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
+.ruff_cache/
+.mypy_cache/
 dist/
 build/
 *.egg-info/
@@ -14,3 +17,4 @@ venv/
 dotmaster/_version.py
 .dotmaster.log
 .dotmaster/
+.DS_Store

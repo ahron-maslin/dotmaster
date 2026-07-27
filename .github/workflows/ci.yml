@@ -8,13 +8,34 @@ on:
     branches:
       - main
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install hatch
+      - name: Ruff lint
+        run: hatch run dev:ruff check .
+      - name: Ruff format check
+        run: hatch run dev:ruff format --check .
+      - name: mypy
+        run: hatch run dev:mypy dotmaster
+
+  test:
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,4 +50,49 @@ jobs:
           pip install hatch
 
       - name: Test
-        run: hatch run dev:pytest
+        run: hatch run dev:pytest --cov=dotmaster --cov-report=xml --cov-fail-under=75
+
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+
+  build-smoke-test:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install hatch
+      - name: Build wheel and sdist
+        run: hatch build
+      - name: Install the built wheel in a clean venv and smoke-test it
+        run: |
+          python -m venv /tmp/smoke-venv
+          /tmp/smoke-venv/bin/pip install dist/*.whl
+          /tmp/smoke-venv/bin/dotmaster --version
+          /tmp/smoke-venv/bin/dotmaster list
+          mkdir /tmp/smoke-project
+          cd /tmp/smoke-project
+          /tmp/smoke-venv/bin/dotmaster init --preset backend_api --yes
+          test -f dotmaster.yaml
+          test -f Dockerfile
+          /tmp/smoke-venv/bin/dotmaster check
+
+  artifact-validity:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install hatch
+      - name: Every generated artifact must parse
+        run: hatch run dev:pytest tests/test_artifact_validity.py -v

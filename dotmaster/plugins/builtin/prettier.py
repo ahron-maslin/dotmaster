@@ -1,29 +1,43 @@
 """
 dotmaster/plugins/builtin/prettier.py
-Generates .prettierrc and .prettierignore configuration files.
+Generates .prettierrc and .prettierignore.
 """
+
 from __future__ import annotations
 
-from pathlib import Path
-
-from dotmaster.plugins.base import BasePlugin
-from dotmaster.renderer import render_to_file
+from dotmaster.plugins.api import Context, FileAction, Plugin
 
 
-class PrettierPlugin(BasePlugin):
+class PrettierPlugin(Plugin):
     name = "prettier"
     description = "Generates .prettierrc and .prettierignore"
-    triggers = ["formatter:prettier"]
+    provides = ("format.javascript",)
+    outputs = (".prettierrc", ".prettierignore")
+    triggers = ("formatter is prettier",)
 
-    def generate(self, config, output_dir: Path) -> list[Path]:
-        ctx = {
-            "framework": config.stack.framework,
-            "has_typescript": "typescript" in config.stack.languages,
+    def matches(self, config) -> bool:
+        return config.quality.formatter == "prettier"
+
+    def plan(self, config, ctx: Context) -> list[FileAction]:
+        # No top-level "parser" key: Prettier already selects the right
+        # parser from the file extension, and forcing "typescript" here used
+        # to break formatting for every non-TS file Prettier touched.
+        data = {
+            "semi": True,
+            "singleQuote": False,
+            "tabWidth": 2,
+            "useTabs": False,
+            "trailingComma": "all",
+            "printWidth": 100,
+            "bracketSpacing": True,
+            "arrowParens": "always",
+            "endOfLine": "lf",
         }
-        prettierrc = render_to_file(
-            "prettierrc.j2", ctx, output_dir / ".prettierrc"
-        )
-        prettierignore = render_to_file(
-            "prettierignore.j2", ctx, output_dir / ".prettierignore"
-        )
-        return [prettierrc, prettierignore]
+        return [
+            self.json_file(".prettierrc", data),
+            self.block_file(
+                ".prettierignore",
+                "node_modules/\ndist/\nbuild/\nout/\n.next/\ncoverage/\n"
+                "*.min.js\n*.min.css\npackage-lock.json\nyarn.lock\npnpm-lock.yaml\n",
+            ),
+        ]

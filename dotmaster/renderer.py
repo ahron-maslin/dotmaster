@@ -1,78 +1,74 @@
 """
 dotmaster/renderer.py
-Jinja2 template rendering engine.
+Template rendering.
 
-Templates live in dotmaster/templates/ and receive the full config dict plus
-any extra context kwargs passed by individual plugins.
+Rendering returns a string and never touches the filesystem — writing is the
+sole responsibility of :mod:`dotmaster.core.apply`.
+
+The environment is *sandboxed*.  Built-in templates are trusted, but plugins
+and (soon) user-supplied template packs are not, and an unsandboxed Jinja
+environment is a remote-code-execution primitive.
 """
+
 from __future__ import annotations
 
+import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import ChoiceLoader, FileSystemLoader, StrictUndefined, TemplateNotFound
+from jinja2.sandbox import SandboxedEnvironment
 
-# Templates directory co-located with the package
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
+#: Extra template roots contributed by plugins, searched after the built-ins.
+_extra_roots: list[Path] = []
 
-def _make_env() -> Environment:
-    """Create a preconfigured Jinja2 Environment."""
-    return Environment(
-        loader=FileSystemLoader(str(TEMPLATES_DIR)),
+
+def register_template_dir(path: Path) -> None:
+    """Let a plugin ship its own templates."""
+    resolved = Path(path).resolve()
+    if resolved not in _extra_roots:
+        _extra_roots.append(resolved)
+        _build_env.cache_clear()
+
+
+def _to_json(value: Any, indent: int = 2) -> str:
+    """Render a Python structure as JSON — the safe way to emit JSON configs."""
+    return json.dumps(value, indent=indent, ensure_ascii=False)
+
+
+@lru_cache(maxsize=1)
+def _build_env() -> SandboxedEnvironment:
+    env = SandboxedEnvironment(
+        loader=ChoiceLoader(
+            [FileSystemLoader(str(TEMPLATES_DIR))]
+            + [FileSystemLoader(str(p)) for p in _extra_roots]
+        ),
         keep_trailing_newline=True,
         trim_blocks=True,
         lstrip_blocks=True,
         undefined=StrictUndefined,
+        autoescape=False,  # config files, never HTML
     )
+    env.filters["to_json"] = _to_json
+    return env
 
 
-def render(template_name: str, context: dict[str, Any]) -> str:
-    """Render *template_name* with *context* and return the result string."""
-    env = _make_env()
-    template = env.get_template(template_name)
-    return template.render(**context)
+class TemplateError(Exception):
+    """A template could not be found or rendered."""
 
 
-def render_to_file(
-    template_name: str,
-    context: dict[str, Any],
-    output_path: Path,
-    *,
-    overwrite: bool = False,
-    merge: bool = True,
-) -> Path:
-    """
-    Render *template_name* and write the output to *output_path*.
+def render(template_name: str, context: dict[str, Any] | None = None, **kwargs: Any) -> str:
+    """Render *template_name* and return the result."""
+    merged = {**(context or {}), **kwargs}
+    try:
+        template = _build_env().get_template(template_name)
+    except TemplateNotFound as exc:
+        raise TemplateError(f"template not found: {template_name}") from exc
+    return template.render(**merged)
 
-    Parameters
-    ----------
-    template_name : str
-        Filename relative to the ``templates/`` directory.
-    context : dict
-        Template variables.
-    output_path : Path
-        Destination file path.
-    overwrite : bool
-        If True, always overwrite the existing file completely. Note that `merge` is ignored if `overwrite` is True.
-    merge : bool
-        If True and *output_path* already exists, smartly merge the new content into the existing file.
 
-    Returns
-    -------
-    Path
-        The (possibly unchanged) output path.
-    """
-    from dotmaster.merger import merge_content
-
-    if output_path.exists() and not overwrite and not merge:
-        return output_path
-        
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    content = render(template_name, context)
-
-    if output_path.exists() and merge and not overwrite:
-        content = merge_content(output_path, content)
-
-    output_path.write_text(content, encoding="utf-8")
-    return output_path
+def available_templates() -> list[str]:
+    return sorted(_build_env().list_templates())

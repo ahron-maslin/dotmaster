@@ -1,17 +1,21 @@
 """
 dotmaster/plugins/builtin/gitignore.py
-Generates .gitignore via gitignore.io API (delegates) or a built-in template.
+Generates .gitignore.
+
+Offline by default.  gitignore.io produces excellent output, but fetching it
+sends a fingerprint of the user's stack to a third party and lets that third
+party decide the contents of the file that keeps secrets out of the repo. That
+is opt-in (``options.offline: false``), never the default, and the bundled
+template is always a complete fallback.
 """
+
 from __future__ import annotations
 
-import urllib.request
-from pathlib import Path
+from dotmaster.plugins.api import Context, FileAction, Plugin
 
-from dotmaster.plugins.base import BasePlugin
-from dotmaster.renderer import render_to_file
+GITIGNORE_IO = "https://www.toptal.com/developers/gitignore/api/"
 
-# Maps our language keys → gitignore.io API terms
-_LANG_MAP: dict[str, str] = {
+_LANG_TERMS: dict[str, str] = {
     "javascript": "node",
     "typescript": "node",
     "python": "python",
@@ -20,8 +24,7 @@ _LANG_MAP: dict[str, str] = {
     "java": "java",
 }
 
-# Maps framework keys → gitignore.io API terms
-_FW_MAP: dict[str, str] = {
+_FRAMEWORK_TERMS: dict[str, str] = {
     "react": "react",
     "nextjs": "nextjs",
     "vue": "vue",
@@ -30,51 +33,55 @@ _FW_MAP: dict[str, str] = {
     "flask": "flask",
 }
 
-# Always append these for a comprehensive ignore file
 _COMMON_TERMS = ["macos", "linux", "windows", "visualstudiocode", "jetbrains"]
 
 
-class GitignorePlugin(BasePlugin):
+class GitignorePlugin(Plugin):
     name = "gitignore"
-    description = "Generates .gitignore via gitignore.io or a built-in template"
-    triggers = []  # always active — overriding should_run below
+    description = "Generates .gitignore"
+    provides = ("vcs.ignore",)
+    outputs = (".gitignore",)
+    triggers = ("always",)
 
-    def should_run(self, config) -> bool:
-        return True  # gitignore is always needed
+    def matches(self, config) -> bool:
+        return True
 
-    def delegate(self, config, output_dir: Path) -> bool:
-        """Fetch from gitignore.io API and write directly."""
+    def plan(self, config, ctx: Context) -> list[FileAction]:
+        content = None if ctx.offline else self._from_api(config, ctx)
+        if content is None:
+            content = ctx.render(
+                "gitignore.j2",
+                languages=config.stack.languages,
+                framework=config.stack.framework,
+                package_manager=config.stack.package_manager,
+            )
+        return [
+            self.block_file(
+                ".gitignore", content, description="ignore rules for the selected stack"
+            )
+        ]
+
+    def _from_api(self, config, ctx: Context) -> str | None:
         terms: list[str] = []
         for lang in config.stack.languages:
-            term = _LANG_MAP.get(lang)
+            term = _LANG_TERMS.get(lang)
             if term and term not in terms:
                 terms.append(term)
-        fw_term = _FW_MAP.get(config.stack.framework)
-        if fw_term:
-            terms.append(fw_term)
-        terms.extend(_COMMON_TERMS)
+        framework_term = _FRAMEWORK_TERMS.get(config.stack.framework)
+        if framework_term and framework_term not in terms:
+            terms.append(framework_term)
+        terms.extend(t for t in _COMMON_TERMS if t not in terms)
 
-        url = (
-            "https://www.toptal.com/developers/gitignore/api/"
-            + ",".join(terms)
+        body = ctx.fetch(GITIGNORE_IO + ",".join(terms))
+        if body is None:
+            return None
+        # Sanity-check the payload before trusting it with a security-relevant
+        # file: a truncated or hijacked response must not silently unignore
+        # things like .env.
+        if "#" not in body or len(body.splitlines()) < 10:
+            ctx.log.warning("gitignore.io response looked wrong; using the bundled template.")
+            return None
+        extras = "\n".join(
+            line for line in (".env", ".dotmaster/", ".dotmaster.log") if line not in body
         )
-        try:
-            req = urllib.request.Request(
-                url, headers={"User-Agent": "dotmaster/0.1"}
-            )
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                content = resp.read().decode("utf-8")
-            out = output_dir / ".gitignore"
-            out.write_text(content, encoding="utf-8")
-            return True
-        except Exception:
-            return False  # fall back to template
-
-    def generate(self, config, output_dir: Path) -> list[Path]:
-        ctx = {
-            "languages": config.stack.languages,
-            "framework": config.stack.framework,
-            "package_manager": config.stack.package_manager,
-        }
-        out = render_to_file("gitignore.j2", ctx, output_dir / ".gitignore")
-        return [out]
+        return f"{body.rstrip()}\n\n# ── dotmaster ──\n{extras}\n" if extras else body
