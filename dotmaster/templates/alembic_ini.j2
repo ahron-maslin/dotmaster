@@ -24,7 +24,15 @@ version_path_separator = os
 
 # The SQLAlchemy connection URL.
 # Override this via the DATABASE_URL environment variable in alembic/env.py
-sqlalchemy.url = {% if has_postgres %}postgresql+psycopg2://postgres:postgres@localhost/{{ project_name | lower | replace("-","_") }}_dev{% elif has_mysql %}mysql+pymysql://mysql:mysql@localhost/{{ project_name | lower | replace("-","_") }}_dev{% elif has_sqlite %}sqlite:///./dev.db{% else %}driver://user:pass@localhost/dbname{% endif %}
+{% if has_postgres %}
+sqlalchemy.url = postgresql+psycopg2://postgres:postgres@localhost/{{ slug }}_dev
+{% elif has_mysql %}
+sqlalchemy.url = mysql+pymysql://mysql:mysql@localhost/{{ slug }}_dev
+{% elif has_sqlite %}
+sqlalchemy.url = sqlite:///./dev.db
+{% else %}
+sqlalchemy.url = driver://user:pass@localhost/dbname
+{% endif %}
 
 
 # ---------------------------------------------------------------------------

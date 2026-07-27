@@ -1,51 +1,38 @@
 """
 dotmaster/plugins/builtin/database.py
-Generates docker-compose.yml with selected database services:
-PostgreSQL, MySQL, MongoDB, Redis, and/or SQLite.
+Generates docker-compose.yml with selected database services.
 """
+
 from __future__ import annotations
 
-from pathlib import Path
-
-from dotmaster.plugins.base import BasePlugin
-from dotmaster.renderer import render_to_file
+from dotmaster.plugins.api import Context, FileAction, MergeStrategy, Plugin
 
 
-class DatabasePlugin(BasePlugin):
+class DatabasePlugin(Plugin):
     name = "database"
-    description = (
-        "Generates docker-compose.yml with selected database services "
-        "(PostgreSQL, MySQL, MongoDB, Redis)"
-    )
-    triggers = ["database:true"]
+    description = "Generates docker-compose.yml with selected database services"
+    provides = ("infra.compose",)
+    outputs = ("docker-compose.yml",)
+    triggers = ("database.enabled is true",)
 
-    def generate(self, config, output_dir: Path) -> list[Path]:
+    def matches(self, config) -> bool:
+        return config.database.enabled
+
+    def plan(self, config, ctx: Context) -> list[FileAction]:
         db = config.database
-        infra = config.infrastructure
-        stack = config.stack
-
-        ctx = {
-            "project_name": config.project.name or "app",
-            "engines": db.engines,
-            "orm": db.orm,
-            "migrations": db.migrations,
-            # App service (include when Docker is also enabled)
-            "include_app_service": infra.docker,
-            "multistage": infra.docker_multistage,
-            "app_port": 8000 if "python" in stack.languages else 3000,
-            # Engine flags
-            "has_postgres": "postgresql" in db.engines,
-            "has_mysql": "mysql" in db.engines,
-            "has_mongo": "mongodb" in db.engines,
-            "has_redis": "redis" in db.engines,
-            "has_sqlite": "sqlite" in db.engines,
-            # Language context for app service image
-            "has_python": "python" in stack.languages,
-            "has_node": any(
-                lang in stack.languages for lang in ("javascript", "typescript")
-            ),
-        }
-        out = render_to_file(
-            "docker_compose.j2", ctx, output_dir / "docker-compose.yml"
+        content = ctx.render(
+            "docker_compose.j2",
+            slug=config.slug,
+            snake_slug=config.snake_slug,
+            engines=db.engines,
+            include_app_service=config.infrastructure.docker,
+            multistage=config.infrastructure.docker_multistage,
+            app_port=config.app_port,
+            has_postgres="postgresql" in db.engines,
+            has_mysql="mysql" in db.engines,
+            has_mongo="mongodb" in db.engines,
+            has_redis="redis" in db.engines,
+            has_python=config.has_python,
+            has_node=config.has_node,
         )
-        return [out]
+        return [self.file("docker-compose.yml", content, strategy=MergeStrategy.OVERWRITE)]

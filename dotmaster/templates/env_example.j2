@@ -26,13 +26,13 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:8080
 {% if db_engines %}
 # ── Database ──────────────────────────────────────────────────────────────────
 {% if 'postgresql' in db_engines %}
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/{{ project_name | replace(' ', '_') | lower }}_dev
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/{{ slug }}_dev
 {% endif %}
 {% if 'mysql' in db_engines %}
-DATABASE_URL=mysql://mysql:mysql@localhost:3306/{{ project_name | replace(' ', '_') | lower }}_dev
+DATABASE_URL=mysql://mysql:mysql@localhost:3306/{{ slug }}_dev
 {% endif %}
 {% if 'mongodb' in db_engines %}
-DATABASE_URL=mongodb://admin:password@localhost:27017/{{ project_name | replace(' ', '_') | lower }}_dev
+DATABASE_URL=mongodb://admin:password@localhost:27017/{{ slug }}_dev
 {% endif %}
 {% if 'sqlite' in db_engines %}
 DATABASE_URL=sqlite:///./dev.db

@@ -48,8 +48,8 @@ ignore = [
 fixable = ["I", "UP", "C4"]
 
 [lint.isort]
-{% if project_name %}
-known-first-party = ["{{ project_name | replace(' ', '_') | replace('-', '_') | lower }}"]
+{% if slug %}
+known-first-party = ["{{ slug }}"]
 {% endif %}
 combine-as-imports = true
 force-sort-within-sections = true

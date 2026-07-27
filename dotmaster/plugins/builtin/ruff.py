@@ -1,31 +1,31 @@
 """
 dotmaster/plugins/builtin/ruff.py
 Generates ruff.toml for Python projects using the Ruff linter/formatter.
+
+This is the single owner of Ruff configuration: PyprojectPlugin skips
+``[tool.ruff]`` whenever this plugin is also active, so the two never emit
+competing configs for the same tool.
 """
+
 from __future__ import annotations
 
-from pathlib import Path
-
-from dotmaster.plugins.base import BasePlugin
-from dotmaster.renderer import render_to_file
+from dotmaster.plugins.api import Context, FileAction, MergeStrategy, Plugin
 
 
-class RuffPlugin(BasePlugin):
+class RuffPlugin(Plugin):
     name = "ruff"
     description = "Generates ruff.toml configuration"
-    triggers = ["linter:ruff", "formatter:ruff"]
+    provides = ("lint.python", "format.python")
+    outputs = ("ruff.toml",)
+    triggers = ("linter or formatter is ruff",)
 
-    def should_run(self, config) -> bool:
-        return (
-            config.quality.linter == "ruff"
-            or config.quality.formatter == "ruff"
+    def matches(self, config) -> bool:
+        return config.quality.linter == "ruff" or config.quality.formatter == "ruff"
+
+    def plan(self, config, ctx: Context) -> list[FileAction]:
+        content = ctx.render(
+            "ruff_toml.j2",
+            slug=config.snake_slug,
+            use_as_formatter=config.quality.formatter == "ruff",
         )
-
-    def generate(self, config, output_dir: Path) -> list[Path]:
-        ctx = {
-            "project_name": config.project.name,
-            "use_as_formatter": config.quality.formatter == "ruff",
-            "testing": config.quality.testing,
-        }
-        out = render_to_file("ruff_toml.j2", ctx, output_dir / "ruff.toml")
-        return [out]
+        return [self.file("ruff.toml", content, strategy=MergeStrategy.MERGE)]

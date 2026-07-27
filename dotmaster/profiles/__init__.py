@@ -5,6 +5,7 @@ Preset profile registry.
 A profile is a dict of default config values that pre-populates the wizard.
 Users can still override any value; profiles are starting points, not lock-ins.
 """
+
 from __future__ import annotations
 
 from dotmaster.profiles.backend_api import BACKEND_API_PROFILE

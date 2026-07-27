@@ -12,11 +12,11 @@ build-backend = "hatchling.build"
 {% endif %}
 
 [project]
-name = "{{ project_name | replace(' ', '-') | lower }}"
+name = "{{ slug }}"
 version = "0.1.0"
 description = "{{ description }}"
 readme = "README.md"
-license = { text = "MIT" }
+license = { text = "{{ license }}" }
 requires-python = ">=3.10"
 {% if author %}
 authors = [{ name = "{{ author }}" }]
@@ -35,12 +35,27 @@ dependencies = [
 {% endif %}
 ]
 
+{% if use_pytest or use_black %}
+[project.optional-dependencies]
+dev = [
+{% if use_black %}
+    "black",
+{% endif %}
+{% if use_pytest %}
+    "pytest",
+    "pytest-cov",
+{% endif %}
+]
+{% endif %}
+
 {% if package_manager == 'poetry' %}
 [tool.poetry]
-name = "{{ project_name | replace(' ', '-') | lower }}"
+name = "{{ slug }}"
 version = "0.1.0"
 description = "{{ description }}"
+{% if author %}
 authors = ["{{ author }}"]
+{% endif %}
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -56,10 +71,8 @@ flask = "^3.0"
 gunicorn = "^22.0"
 {% endif %}
 
+{% if use_black or use_pytest %}
 [tool.poetry.group.dev.dependencies]
-{% if use_ruff %}
-ruff = "*"
-{% endif %}
 {% if use_black %}
 black = "*"
 {% endif %}
@@ -68,39 +81,17 @@ pytest = "*"
 pytest-cov = "*"
 {% endif %}
 {% endif %}
-
-# ── Ruff ──────────────────────────────────────────────────────────────────────
-{% if use_ruff %}
-[tool.ruff]
-line-length = 88
-target-version = "py310"
-
-[tool.ruff.lint]
-select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # pyflakes
-    "I",    # isort
-    "B",    # flake8-bugbear
-    "C4",   # flake8-comprehensions
-    "UP",   # pyupgrade
-    "N",    # pep8-naming
-]
-ignore = ["E501"]   # line length handled by formatter
-
-[tool.ruff.lint.isort]
-known-first-party = ["{{ project_name | replace(' ', '_') | replace('-', '_') | lower }}"]
 {% endif %}
 
-# ── Black ─────────────────────────────────────────────────────────────────────
 {% if use_black %}
+# ── Black ─────────────────────────────────────────────────────────────────────
 [tool.black]
 line-length = 88
 target-version = ["py310", "py311", "py312"]
 {% endif %}
 
-# ── Pytest ────────────────────────────────────────────────────────────────────
 {% if use_pytest %}
+# ── Pytest ────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"

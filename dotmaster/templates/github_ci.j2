@@ -10,10 +10,11 @@ on:
   pull_request:
     branches: [main, master, develop]
 
+{% raw %}
 concurrency:
-  {% raw %}group: ${{ github.workflow }}-${{ github.ref }}{% endraw %}
-
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+{% endraw %}
 
 jobs:
 {% if has_node %}
@@ -27,43 +28,82 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: {% raw %}Set up Node ${{ matrix.node-version }}{% endraw %}
-
+{% raw %}
+      - name: Set up Node ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          {% raw %}node-version: ${{ matrix.node-version }}{% endraw %}
+          node-version: ${{ matrix.node-version }}
+{% endraw %}
+{% if package_manager == 'pnpm' %}
+          cache: pnpm
+{% elif package_manager == 'yarn' %}
+          cache: yarn
+{% else %}
+          cache: npm
+{% endif %}
 
-          {% if package_manager == 'pnpm' %}cache: pnpm{% elif package_manager == 'yarn' %}cache: yarn{% else %}cache: npm{% endif %}
-
-      {% if package_manager == 'pnpm' %}
+{% if package_manager == 'pnpm' %}
       - name: Enable pnpm
         uses: pnpm/action-setup@v3
         with:
           version: latest
-      {% endif %}
+{% endif %}
 
       - name: Install dependencies
-        run: {% if package_manager == 'pnpm' %}pnpm install --frozen-lockfile{% elif package_manager == 'yarn' %}yarn install --frozen-lockfile{% else %}npm ci{% endif %}
+{% if package_manager == 'pnpm' %}
+        run: pnpm install --frozen-lockfile
+{% elif package_manager == 'yarn' %}
+        run: yarn install --frozen-lockfile
+{% else %}
+        run: npm ci
+{% endif %}
 
-      {% if linter == 'eslint' %}
+{% if linter == 'eslint' %}
       - name: Lint
-        run: {% if package_manager == 'pnpm' %}pnpm{% elif package_manager == 'yarn' %}yarn{% else %}npm{% endif %} run lint
-      {% endif %}
+{% if package_manager == 'pnpm' %}
+        run: pnpm run lint
+{% elif package_manager == 'yarn' %}
+        run: yarn run lint
+{% else %}
+        run: npm run lint
+{% endif %}
+{% endif %}
 
-      {% if formatter == 'prettier' %}
+{% if formatter == 'prettier' %}
       - name: Format check
-        run: {% if package_manager == 'pnpm' %}pnpm{% elif package_manager == 'yarn' %}yarn{% else %}npm{% endif %} run format:check
-      {% endif %}
+{% if package_manager == 'pnpm' %}
+        run: pnpm run format:check
+{% elif package_manager == 'yarn' %}
+        run: yarn run format:check
+{% else %}
+        run: npm run format:check
+{% endif %}
+{% endif %}
 
-      {% if testing in ('jest', 'vitest') %}
+{% if testing in ('jest', 'vitest') %}
       - name: Test
-        run: {% if package_manager == 'pnpm' %}pnpm{% elif package_manager == 'yarn' %}yarn{% else %}npm{% endif %} test {% if testing == 'jest' %}-- --coverage{% endif %}
-      {% endif %}
+{% if package_manager == 'pnpm' %}
+        run: pnpm test{% if testing == 'jest' %} -- --coverage{% endif %}
 
-      {% if framework == 'nextjs' %}
+{% elif package_manager == 'yarn' %}
+        run: yarn test{% if testing == 'jest' %} -- --coverage{% endif %}
+
+{% else %}
+        run: npm test{% if testing == 'jest' %} -- --coverage{% endif %}
+
+{% endif %}
+{% endif %}
+
+{% if framework == 'nextjs' %}
       - name: Build
-        run: {% if package_manager == 'pnpm' %}pnpm{% elif package_manager == 'yarn' %}yarn{% else %}npm{% endif %} run build
-      {% endif %}
+{% if package_manager == 'pnpm' %}
+        run: pnpm run build
+{% elif package_manager == 'yarn' %}
+        run: yarn run build
+{% else %}
+        run: npm run build
+{% endif %}
+{% endif %}
 
 {% endif %}
 {% if has_python %}
@@ -73,17 +113,18 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: {% raw %}Set up Python ${{ matrix.python-version }}{% endraw %}
-
+{% raw %}
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          {% raw %}python-version: ${{ matrix.python-version }}{% endraw %}
+          python-version: ${{ matrix.python-version }}
+{% endraw %}
 
-      {% if package_manager == 'poetry' %}
+{% if package_manager == 'poetry' %}
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
@@ -93,35 +134,55 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
-      {% elif package_manager == 'uv' %}
+{% elif package_manager == 'uv' %}
       - name: Install uv
         uses: astral-sh/setup-uv@v3
 
       - name: Install dependencies
         run: uv sync
 
-      {% else %}
+{% else %}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt || pip install -r requirements.txt
+          if [ -f requirements-dev.txt ]; then pip install -r requirements.txt -r requirements-dev.txt
+          elif [ -f requirements.txt ]; then pip install -r requirements.txt
+          else pip install -e ".[dev]" 2>/dev/null || pip install -e .
+          fi
 
-      {% endif %}
-
-      {% if linter == 'ruff' %}
+{% endif %}
+{% if linter == 'ruff' %}
       - name: Ruff lint
-        run: {% if package_manager == 'poetry' %}poetry run {% elif package_manager == 'uv' %}uv run {% endif %}ruff check .
+{% if package_manager == 'poetry' %}
+        run: poetry run ruff check .
+{% elif package_manager == 'uv' %}
+        run: uv run ruff check .
+{% else %}
+        run: ruff check .
+{% endif %}
 
-      {% endif %}
-      {% if formatter == 'black' %}
+{% endif %}
+{% if formatter == 'black' %}
       - name: Black format check
-        run: {% if package_manager == 'poetry' %}poetry run {% elif package_manager == 'uv' %}uv run {% endif %}black --check .
+{% if package_manager == 'poetry' %}
+        run: poetry run black --check .
+{% elif package_manager == 'uv' %}
+        run: uv run black --check .
+{% else %}
+        run: black --check .
+{% endif %}
 
-      {% endif %}
-      {% if testing == 'pytest' %}
+{% endif %}
+{% if testing == 'pytest' %}
       - name: Pytest
-        run: {% if package_manager == 'poetry' %}poetry run {% elif package_manager == 'uv' %}uv run {% endif %}pytest --tb=short
-      {% endif %}
+{% if package_manager == 'poetry' %}
+        run: poetry run pytest --tb=short
+{% elif package_manager == 'uv' %}
+        run: uv run pytest --tb=short
+{% else %}
+        run: pytest --tb=short
+{% endif %}
+{% endif %}
 
 {% endif %}
 {% if has_go %}
@@ -155,7 +216,13 @@ jobs:
   docker:
     name: Docker — Build image
     runs-on: ubuntu-latest
-    needs: [{% if has_node %}node{% endif %}{% if has_python %}{% if has_node %}, {% endif %}python{% endif %}{% if has_go %}{% if has_node or has_python %}, {% endif %}go{% endif %}]
+{% set needs = [] %}
+{% if has_node %}{% set _ = needs.append('node') %}{% endif %}
+{% if has_python %}{% set _ = needs.append('python') %}{% endif %}
+{% if has_go %}{% set _ = needs.append('go') %}{% endif %}
+{% if needs %}
+    needs: [{{ needs | join(', ') }}]
+{% endif %}
     steps:
       - uses: actions/checkout@v4
 
@@ -167,7 +234,7 @@ jobs:
         with:
           context: .
           push: false
-          tags: {{ project_name }}:ci
+          tags: {{ (project_name or 'app') | lower | replace(' ', '-') }}:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
 {% endif %}

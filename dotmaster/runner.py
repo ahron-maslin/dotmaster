@@ -2,6 +2,7 @@
 dotmaster/runner.py
 Shell command runner — safely delegates to official CLI tools when available.
 """
+
 from __future__ import annotations
 
 import shutil
