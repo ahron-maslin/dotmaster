@@ -72,6 +72,5 @@ class TestStateIO:
 
     def test_state_dir_gets_its_own_gitignore(self, tmp_path):
         save_state(State(), tmp_path)
-        assert (tmp_path / ".dotmaster" / ".gitignore").read_text().strip() == (
-            "# Created by dotmaster — internal state, do not commit.\n*"
-        )
+        content = (tmp_path / ".dotmaster" / ".gitignore").read_text(encoding="utf-8")
+        assert content.strip() == "# Created by dotmaster — internal state, do not commit.\n*"
